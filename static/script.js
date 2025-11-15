@@ -1,36 +1,54 @@
-/*
-// Click "Run DFS"
-document.getElementById("runBtn").addEventListener("click", async () => {
-  
-  // fetch DFS steps from server
-  const response = await fetch("/run_dfs");
-  const steps = await response.json();
-  console.log("DFS steps:", steps);
+// global variables
+let tree = {};
+let nodePositions = {};
 
-  // reset all nodes to unvisited
-  document.querySelectorAll(".node").forEach(node => {
-    node.classList.remove("visited");
-  });
-
-  // animate nodes in order
-  for (let i = 0; i < steps.length; i++) {
-    const nodeId = steps[i];
-    const node = document.getElementById(nodeId);
-
-    if (node) {
-      node.classList.add("visited"); // change color
-      await new Promise(r => setTimeout(r, 1000)); // wait 1 second
-    }
-  }
-});
-*/
-// Click "draw tree"
-document.getElementById("drawBtn").addEventListener("click", async () => {
+// draw default tree on page load
+window.addEventListener("DOMContentLoaded", async () => {
   
   // fetch default tree from flask
   const response = await fetch("/draw_default_tree");
-  const graph = await response.json();
-  console.log("Default tree:", graph);
+  tree = await response.json();
+  console.log("Default tree:", tree);
+  drawTree(tree);
+});
+
+document.getElementById("drawBtn").addEventListener("click", async () => {
+  const input = prompt("Enter your tree as JSON:\n\nExample:\n{\n  \"A\": [\"B\", \"C\"],\n  \"B\": [\"D\", \"E\"],\n  \"C\": []\n} \n\n Please make sure the root node is 'A'");
+
+  if (!input) return;
+
+  let customTree;
+  try {
+    customTree = JSON.parse(input);
+  } catch (err) {
+    alert("Invalid JSON, please make sure your input is in proper JSON format.");
+    return;
+  }
+
+  const response = await fetch("/set_custom_graph", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ graph: customTree })
+  });
+
+  const result = await response.json();
+  if (result.status === "success") {
+    console.log("Graph updated on server");
+    tree = customTree;
+    console.log("Custom tree:", customTree);
+    drawTree(customTree);
+  } else {
+    alert("Failed to update graph!");
+  }
+});
+
+function getMaxDepth(tree, node, depth = 0) {
+  const children = tree[node];
+  if (!children || children.length === 0) return depth;
+  return Math.max(...children.map(child => getMaxDepth(tree, child, depth + 1)));
+}
+
+function drawTree(tree) {
 
   // reset drawing area
   const drawingArea = document.getElementById("tree");
@@ -39,59 +57,55 @@ document.getElementById("drawBtn").addEventListener("click", async () => {
   const svgWidth = drawingArea.clientWidth;
   const svgHeight = drawingArea.clientHeight;
 
-  const root = "A";
-  const depths = computeDepths(graph, root);
-  const depthGap = svgHeight / (Object.keys(depths).length + 1);
-  const nodeGap = svgWidth /  (Math.max(...Object.values(depths).map(arr => arr.length)) + 1);
-  const nodePositions = {};
+  nodePositions = computePositions(tree, "A", svgWidth, svgHeight);
+  console.log("Node positions:", nodePositions);
 
-  // draw nodes
-  Object.keys(depths).forEach((level, i) => {
-    const y = 50 + i * depthGap;
-    const nodes = depths[level];
-
-    const totalWidth = (nodes.length - 1) * nodeGap;
-    const startX = svgWidth / 2 - totalWidth / 2;
-
-    nodes.forEach((node, j) => {
-      const x = startX + j * nodeGap;
-      nodePositions[node] = {x, y};
-      drawNode(drawingArea, node, x, y);
-    });
-  });
+  // Draw nodes
+  for (const [node, {x, y}] of Object.entries(nodePositions)) {
+    drawNode(drawingArea, node, x, y);
+  }
 
   // Draw edges
-  for (const parent in graph) {
-    for (const child of graph[parent]) {
+  for (const parent in tree) {
+    for (const child of tree[parent]) {
       const p = nodePositions[parent];
       const c = nodePositions[child];
       drawEdge(drawingArea, p.x, p.y, c.x, c.y);
     }
   }
-});
+}
 
-function computeDepths(tree, root){
-  const depths = {};
-  const queue = [{node: root, depth: 0}];
-  const visited = new Set();
+function computePositions(tree, root, svgWidth, svgHeight){
+  // recursively compute positions for each node to be the center of its children
+  const positions = {};
+  const maxDepth = getMaxDepth(tree, root);
+  const leafCount = Object.values(tree).filter(children => children.length === 0).length;
 
-  while(queue.length > 0){
-    // dequeue
-    const {node, depth} = queue.shift();
-    if(visited.has(node)) continue;
-    visited.add(node);
+  const depthGap = svgHeight / (maxDepth + 1);
+  const nodeGap = svgWidth / (leafCount + 1);
 
-    // sort into depth arrays
-    depths[depth] = depths[depth] || [];
-    depths[depth].push(node);
+  let currentX = 0;
 
-    // enqueue children
-    for(const child of tree[node]){
-      queue.push({node: child, depth: depth + 1});
+  function dfs(node, depth) {
+    const children = tree[node];
+    const y = 50 + depth * depthGap;
+
+    if (children.length === 0) {
+      const x = nodeGap + currentX * nodeGap;
+      positions[node] = {x, y};
+      currentX += 1;
+      return x;
     }
+
+    const childXs = children.map(child => dfs(child, depth + 1));
+    const x = (Math.min(...childXs) + Math.max(...childXs)) / 2;
+    positions[node] = { x, y };
+    return x;
   }
 
-  return depths;
+  dfs(root, 0);
+
+  return positions;
 }
 
 // draw nodes at position x, y

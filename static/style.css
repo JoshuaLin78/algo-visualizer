@@ -16,6 +16,14 @@ body {
       margin-top: 60px;
     }
 
+    #tree {
+      display: block;
+      margin: 20px auto;
+
+      border: 2px solid white;
+      border-radius: 10px;
+    }
+
     .node {
       width: 60px;
       height: 60px;
