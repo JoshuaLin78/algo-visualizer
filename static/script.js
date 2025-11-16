@@ -1,22 +1,38 @@
-// global variables
-let tree = {};
-let nodePositions = {};
-
 // draw default tree on page load
 window.addEventListener("DOMContentLoaded", async () => {
   
   // fetch default tree from flask
   const response = await fetch("/draw_default_tree");
-  tree = await response.json();
+  const tree = await response.json();
   console.log("Default tree:", tree);
   drawTree(tree);
 });
 
+// animate dfs traversal
+document.getElementById("dfsBtn").addEventListener("click", async () => {
+  const response = await fetch("/run_dfs");
+  const steps = await response.json();
+
+  console.log("DFS steps:", steps);
+  animate(steps);
+})
+
+// animate bfs traversal
+document.getElementById("bfsBtn").addEventListener("click", async () => {
+  const response = await fetch("/run_bfs");
+  const steps = await response.json();
+
+  console.log("BFS steps:", steps);
+  animate(steps);
+})
+
+// handle custom tree input
 document.getElementById("drawBtn").addEventListener("click", async () => {
   const input = prompt("Enter your tree as JSON:\n\nExample:\n{\n  \"A\": [\"B\", \"C\"],\n  \"B\": [\"D\", \"E\"],\n  \"C\": []\n} \n\n Please make sure the root node is 'A'");
 
   if (!input) return;
 
+  // parse input JSON
   let customTree;
   try {
     customTree = JSON.parse(input);
@@ -25,16 +41,17 @@ document.getElementById("drawBtn").addEventListener("click", async () => {
     return;
   }
 
+  // send custom tree to server
   const response = await fetch("/set_custom_graph", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ graph: customTree })
   });
 
+  // on success, draw the custom tree
   const result = await response.json();
   if (result.status === "success") {
     console.log("Graph updated on server");
-    tree = customTree;
     console.log("Custom tree:", customTree);
     drawTree(customTree);
   } else {
@@ -57,7 +74,8 @@ function drawTree(tree) {
   const svgWidth = drawingArea.clientWidth;
   const svgHeight = drawingArea.clientHeight;
 
-  nodePositions = computePositions(tree, "A", svgWidth, svgHeight);
+  // compute node positions
+  const nodePositions = computePositions(tree, "A", svgWidth, svgHeight);
   console.log("Node positions:", nodePositions);
 
   // Draw nodes
@@ -70,7 +88,7 @@ function drawTree(tree) {
     for (const child of tree[parent]) {
       const p = nodePositions[parent];
       const c = nodePositions[child];
-      drawEdge(drawingArea, p.x, p.y, c.x, c.y);
+      drawEdge(drawingArea, parent, child, p.x, p.y, c.x, c.y);
     }
   }
 }
@@ -108,6 +126,17 @@ function computePositions(tree, root, svgWidth, svgHeight){
   return positions;
 }
 
+async function animate(steps){
+  // animate tree traversal
+  for (const node of steps) {
+    const circle = document.getElementById(node);
+
+    circle.setAttribute("fill", "orange");
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    circle.setAttribute("fill", "gray");
+  }
+}
+
 // draw nodes at position x, y
 function drawNode(svg, id, x, y) {
   const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
@@ -127,7 +156,7 @@ function drawNode(svg, id, x, y) {
 }
 
 // Draw edge between two points
-function drawEdge(svg, x1, y1, x2, y2) {
+function drawEdge(svg, parent, child, x1, y1, x2, y2) {
   const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
   line.setAttribute("x1", x1);
   line.setAttribute("y1", y1);
